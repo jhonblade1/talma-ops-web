@@ -129,53 +129,46 @@ def _sort_key(hhmm_str: str, next_day: bool = False) -> int:
 
 
 def _extraer_starperu_pdf(file_bytes: bytes, filename: str = "", base_iata: str = "LIM"):
-    """Extrae llegadas y salidas de Lima desde el PDF oficial SRU-FOR-DSP-012 de StarPerú."""
+    """Extrae llegadas y salidas de Lima desde el PDF SRU-FOR-DSP-012 de StarPerú."""
     reader = PdfReader(io.BytesIO(file_bytes))
-    layout_text = "\n".join(
-        p.extract_text(extraction_mode="layout") or "" for p in reader.pages
-    )
     plain_text = "\n".join(p.extract_text() or "" for p in reader.pages)
-
     op_date = _parse_starperu_date(plain_text, filename=filename)
 
-    flight_re = re.compile(
-        r"^\s*(\d{1,2})\s+(\d{2,4})\s+([A-Z]{3})\s+([A-Z]{3})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\b"
+    flight_line_re = re.compile(
+        r"^\s*(\d{1,2})\s+(\d{2,4})\s+([A-Z]{3})\s+([A-Z]{3})\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\b"
     )
-    reg_re = re.compile(r"^\s*\d{1,2}\s+((?:OB|N)[A-Z0-9]{4,6})\s*$")
+    reg_line_re = re.compile(r"^\s*\d{1,2}\s+((?:OB|N)-?[A-Z0-9]{4,6})\s*$")
 
     parsed_flights = []
     reg_markers = []
     section = "REGULARES"
 
-    for idx, raw_line in enumerate(layout_text.split("\n")):
-        upper_line = raw_line.upper()
+    for raw_line in plain_text.split("\n"):
+        upper_line = raw_line.strip().upper()
+        if not upper_line:
+            continue
         if "VUELOS NO REGULARES" in upper_line:
             section = "NO_REGULARES"
 
-        m_f = flight_re.match(upper_line)
+        m_f = flight_line_re.match(upper_line)
         if m_f:
             parsed_flights.append({
-                "line_idx": idx,
                 "section": section,
                 "seq": int(m_f.group(1)),
                 "vuelo": int(m_f.group(2)),
                 "orig": m_f.group(3),
                 "dest": m_f.group(4),
-                "etd": m_f.group(5),
-                "eta": m_f.group(6),
+                "etd": m_f.group(5).zfill(5),
+                "eta": m_f.group(6).zfill(5),
                 "matricula": "",
             })
             continue
 
-        m_r = reg_re.match(upper_line)
+        m_r = reg_line_re.match(upper_line)
         if m_r:
-            reg_markers.append({
-                "line_idx": idx,
-                "section": section,
-                "matricula": m_r.group(1).strip(),
-            })
+            reg_markers.append(m_r.group(1).strip())
 
-    # Reconstruir cadenas operativas por aeronave (LIM -> ... -> LIM) para asignar matrículas exactas
+    # Agrupar vuelos en cadenas continuas por aeronave (LIM -> ... -> LIM)
     chains = []
     current_chain = []
     for fl in parsed_flights:
@@ -195,19 +188,10 @@ def _extraer_starperu_pdf(file_bytes: bytes, filename: str = "", base_iata: str 
     if current_chain:
         chains.append(current_chain)
 
-    if len(chains) == len(reg_markers):
-        for idx_c, chain in enumerate(chains):
-            mat = reg_markers[idx_c]["matricula"]
-            for fl in chain:
-                fl["matricula"] = mat
-    else:
-        for fl in parsed_flights:
-            same_sec = [
-                rm for rm in reg_markers if rm["section"] == fl["section"]]
-            if same_sec:
-                nearest = min(same_sec, key=lambda rm: abs(
-                    rm["line_idx"] - fl["line_idx"]))
-                fl["matricula"] = nearest["matricula"]
+    for idx_c, chain in enumerate(chains):
+        mat = reg_markers[idx_c] if idx_c < len(reg_markers) else ""
+        for fl in chain:
+            fl["matricula"] = mat
 
     vuelos_llegada = []
     vuelos_salida = []
