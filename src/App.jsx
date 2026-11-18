@@ -3,6 +3,7 @@ import React, { useState, useRef, useMemo } from 'react';
 const AIRLINES = [
   { id: 'H8', name: 'SKY Airline', base: 'LIM' },
   { id: 'JZ', name: 'JetSMART', base: 'LIM' },
+  { id: '2I', name: 'StarPerú', base: 'LIM' },
 ];
 
 const JETSMART_COLS = ['DATE', 'Route', 'FLT', 'REG', 'DEP', 'ARR', 'STD', 'STA', 'PAX'];
@@ -39,7 +40,7 @@ function formatJetSmartText(rawText) {
 }
 
 export default function App() {
-  const [selectedAirline, setSelectedAirline] = useState(AIRLINES[1]);
+  const [selectedAirline, setSelectedAirline] = useState(AIRLINES[0]);
   const [detectedDate, setDetectedDate] = useState('');
   const [rotaciones, setRotaciones] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -316,7 +317,9 @@ export default function App() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-400 font-normal">
-              Formato oficial de Sky Airline (.xlsx o .pdf)
+              {selectedAirline.id === '2I'
+              ? 'Programación oficial de StarPerú (.pdf)'
+              : 'Formato oficial de Sky Airline (.xlsx o .pdf)'}
             </p>
 
             <input
